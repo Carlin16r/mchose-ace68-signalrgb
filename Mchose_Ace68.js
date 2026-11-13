@@ -113,7 +113,6 @@ export function Render() {
 	}
 
 	sendFrame(colors);
-	device.pause(1);
 }
 
 export function Shutdown(SystemSuspending) {
@@ -183,11 +182,10 @@ function isAck(data, off) {
 	return data[s + 1] === 0x0B && data[s + 5] === (off & 0xFF) && data[s + 6] === ((off >> 8) & 0xFF);
 }
 
+// Drain stale reports with short reads. device.clearReadBuffer() is the documented way, but random
+// wrong-colored keys came back after switching to it (cause not confirmed). These 1 ms reads also
+// give the keyboard a tiny gap before each block, and that version was stable in testing.
 function clearPendingReports() {
-	if (typeof device.clearReadBuffer === "function") {
-		device.clearReadBuffer();
-		return;
-	}
 	for (let i = 0; i < 4; i++) {
 		const old = device.read([0x00], 65, 1);
 		if (!old || old.length === 0) { break; }
