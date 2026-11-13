@@ -54,10 +54,10 @@ It also sends `55 0b …` echoes. **Sending the 7 blocks without waiting for the
 
 ```
 Esc 26   1 64   2 22   3 2    4 60   5 38   6 78   7 76   8 27   9 67   0 65   - 5    = 28   Backspace 8   Insert 70
-Tab 66   Q 4    W 83   E 0    R 40   T 18   Y 16   U 47   I 7    O 25   P 45   [ 68   ] 48   \ 30          Delete 10
+Tab 66   Q 4    W 83   E 0    R 40   T 18   Y 16   U 47   I 7    O 25   P 45   [ 68   ] 48   \ 30          Del 10
 Caps 46  A 81   S 80   D 82   F 58   G 36   H 56   J 3    K 41   L 12   ; 52   ' 72   Enter 34            PgUp 50
 LShift 6 Z 44   X 49   C 29   V 9    B 69   N 43   M 23   , 21   . 1    / 32   RShift 54   Up 53   PgDn 55
-LCtrl 11 LWin 71  LAlt 31  Space 63  RAlt 61  FN 14  RCtrl 74  Left 33  Down 73  Right 13
+LCtrl 11 LWin 71  LAlt 31  Space 63  RAlt 61  Fn 14  RCtrl 74  Left 33  Down 73  Right 13
 ```
 
 ## Open questions
