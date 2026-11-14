@@ -68,7 +68,7 @@ The keyboard has 3 onboard profiles and each one has its own lighting area. The 
 | profile | area base                              |
 |---------|----------------------------------------|
 | 1       | `0x0000` (observed)                    |
-| 2       | `0x0200` (inferred from the spacing)   |
+| 2       | `0x0200` (checked: the plugin worked)  |
 | 3       | `0x0400` (observed)                    |
 
 Writing to the base of a profile that is not the active one is accepted (ACK) but not shown.

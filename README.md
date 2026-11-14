@@ -31,9 +31,9 @@ the web driver at mchose.com.cn ("M HUB").
 - The plugin only changes lighting. It does not touch key mapping, macros or the profile settings.
 - **Onboard profiles:** every onboard profile has its own lighting area in the keyboard memory. The plugin
   reads the active profile (command `04`) and writes to that profile's area, following profile switches.
-  Profile 1 (`0x0000`) and profile 3 (`0x0400`) were observed with the vendor web driver; the area of
-  profile 2 (`0x0200`) is inferred from the spacing. If the colors go to the wrong place, pick the profile
-  by hand in the plugin setting **Onboard Profile**.
+  The keyboard has 3 onboard profile slots (areas `0x0000`, `0x0200`, `0x0400`) and the plugin worked on all
+  three on the tested unit. If the colors go to the wrong place, pick the profile by hand in the plugin
+  setting **Onboard Profile**.
 - **The profile's lighting mode must be "Custom"** in the web driver (Lighting → Custom). If a profile uses
   "Normal light" (one of the keyboard's built-in effects), the keyboard shows that effect and ignores
   SignalRGB. Forcing the mode from the plugin is not implemented yet (a command `06` seems to write it).
