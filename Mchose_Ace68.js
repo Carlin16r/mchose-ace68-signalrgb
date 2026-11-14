@@ -29,10 +29,12 @@ global
 shutdownColor:readonly
 LightingMode:readonly
 forcedColor:readonly
+profileSlot:readonly
 */
 
 export function ControllableParameters() {
 	return [
+		{ "property": "profileSlot", "label": "Onboard Profile", "type": "combobox", "values": ["Auto", "1", "2", "3"], "default": "Auto" },
 		{ "property": "shutdownColor", "label": "Shutdown Color", "min": "0", "max": "360", "type": "color", "default": "#000000" },
 		{ "property": "LightingMode", "label": "Lighting Mode", "type": "combobox", "values": ["Canvas", "Forced"], "default": "Canvas" },
 		{ "property": "forcedColor", "label": "Forced Color", "min": "0", "max": "360", "type": "color", "default": "#009bde" },
@@ -91,7 +93,16 @@ export function Initialize() {
 	device.setName("Mchose Ace 68");
 	device.setSize([GRID_W, GRID_H]);
 	device.setControllableLeds(vLedNames, vLedPositions);
+
+	// The plugin state survives a re-initialization, so reset what depends on the keyboard.
+	lastBlocks = {};
+	forceFull = true;
+	failStreak = 0;
+	readBroken = false;
+	profileBase = 0;
+	activeProfile = -1;
 	device.log("Mchose Ace 68 initialized");
+	updateProfileBase();
 }
 
 export function Render() {
@@ -100,6 +111,12 @@ export function Render() {
 		device.log("frame " + frameCount + " | mode=" + LightingMode +
 			" | ACK ok=" + ackOk + " failed=" + ackFail + " readBroken=" + readBroken);
 	}
+
+	// If the keyboard stopped acknowledging, only try once per second so SignalRGB is not slowed down.
+	if (failStreak >= 3 && frameCount % 60 !== 0) { return; }
+
+	// Follow the keyboard's active onboard profile (about every 2 seconds).
+	if (frameCount % 120 === 0) { updateProfileBase(); }
 
 	const colors = new Array(LED_COUNT).fill(null);
 	const forced = hexToRgb(forcedColor);
@@ -135,9 +152,64 @@ let lastBlocks = {};
 let forceFull = true;
 let readBroken = false; // becomes true if device.read throws; then only fixed pauses are used
 let ackOk = 0, ackFail = 0, frameCount = 0;
+let failStreak = 0;      // consecutive frames in which at least one block got no ACK
+let lastResp = "none";   // last report seen while waiting for an ACK (for the log)
+
+// Each onboard profile has its own lighting area in the keyboard memory. Observed with the web
+// driver: profile 1 starts at 0x0000 and profile 3 at 0x0400 (profile 2 is inferred: 0x0200).
+const PROFILE_STRIDE = 0x200;
+let profileBase = 0;
+let activeProfile = -1;
+
+// Command 04 (the web driver sends it on connect) answers "aa 04 00 08 38 00 00 00 <profile> <count> ...".
+// Returns the active profile index (0-based) or -1 if it could not be read.
+function readActiveProfile() {
+	if (readBroken) { return -1; }
+	try {
+		clearPendingReports();
+		const pkt = new Array(64).fill(0);
+		pkt[0] = 0x55;
+		pkt[1] = 0x04;
+		pkt[3] = 0x38;
+		pkt[4] = 0x38;
+		device.write([0x00].concat(pkt), 65);
+		for (let i = 0; i < 6; i++) {
+			const resp = device.read([0x00], 65, 20);
+			if (!resp || resp.length === 0) { break; }
+			const s = (resp[0] === 0xAA) ? 0 : ((resp[0] === 0x00 && resp[1] === 0xAA) ? 1 : -1);
+			if (s >= 0 && resp[s + 1] === 0x04 && resp.length > s + 9) {
+				const idx = resp[s + 8], count = resp[s + 9];
+				return (idx < count && idx < 3) ? idx : -1;
+			}
+		}
+	} catch (e) {
+		device.log("could not read the active profile: " + e);
+	}
+	return -1;
+}
+
+// Chooses the lighting area of the active profile (or the one picked in the plugin settings).
+function updateProfileBase() {
+	let idx;
+	if (profileSlot === "Auto") {
+		idx = readActiveProfile();
+		if (idx < 0) { idx = (activeProfile >= 0) ? activeProfile : 0; } // keep the last known one
+	} else {
+		idx = parseInt(profileSlot, 10) - 1;
+	}
+
+	if (idx !== activeProfile) {
+		device.log("Onboard profile " + (idx + 1) + " -> lighting area at 0x" + (idx * PROFILE_STRIDE).toString(16));
+		activeProfile = idx;
+		profileBase = idx * PROFILE_STRIDE;
+		lastBlocks = {};
+		forceFull = true;
+	}
+}
 
 // colors: LED_COUNT entries of [r, g, b] (or null), indexed by the hardware LED index.
 function sendFrame(colors) {
+	let frameFailed = false;
 	const buf = new Array(0x180 + 0x38).fill(0);
 	for (let i = 0; i < LED_COUNT; i++) {
 		const c = colors[i];
@@ -148,13 +220,14 @@ function sendFrame(colors) {
 	}
 
 	for (const off of BLOCK_OFFSETS) {
+		const addr = profileBase + off; // address inside the active profile's lighting area
 		const pkt = new Array(64).fill(0);
 		pkt[0] = 0x55;
 		pkt[1] = 0x0B;
 		pkt[2] = 0x00;
 		pkt[4] = 0x38;
-		pkt[5] = off & 0xFF;
-		pkt[6] = (off >> 8) & 0xFF;
+		pkt[5] = addr & 0xFF;
+		pkt[6] = (addr >> 8) & 0xFF;
 		pkt[7] = 0x00;
 		for (let i = 0; i < 56; i++) { pkt[8 + i] = buf[off + i]; }
 
@@ -166,12 +239,24 @@ function sendFrame(colors) {
 		// refresh about every 2 seconds to repair any block the keyboard may have missed.
 		const sig = pkt.slice(8).join(",");
 		const refresh = forceFull || (frameCount % 120 === 0);
-		if (!refresh && lastBlocks[off] === sig) { continue; }
+		if (!refresh && lastBlocks[addr] === sig) { continue; }
 
-		const ok = writeBlockWithAck(pkt, off);
-		lastBlocks[off] = ok ? sig : null; // if it failed, try again on the next frame
+		const ok = writeBlockWithAck(pkt, addr);
+		lastBlocks[addr] = ok ? sig : null; // if it failed, try again on the next frame
+		if (!ok) { frameFailed = true; }
 	}
 	forceFull = false;
+
+	if (frameFailed) {
+		failStreak++;
+		if (failStreak === 3) {
+			device.log("Keyboard is not acknowledging lighting blocks (profile/mode changed?). " +
+				"Last report: " + lastResp + ". Retrying once per second.");
+		}
+	} else {
+		if (failStreak >= 3) { device.log("Keyboard is acknowledging lighting blocks again."); }
+		failStreak = 0;
+	}
 }
 
 // data: input report from device.read. Some hosts keep the report ID (0x00) as the first byte.
@@ -193,7 +278,8 @@ function clearPendingReports() {
 }
 
 function writeBlockWithAck(pkt, off) {
-	for (let attempt = 0; attempt < 3; attempt++) {
+	const maxAttempts = failStreak >= 3 ? 1 : 3;
+	for (let attempt = 0; attempt < maxAttempts; attempt++) {
 		// Drop stale reports so the ACK of a previous block is not mistaken for this one.
 		if (!readBroken) {
 			try { clearPendingReports(); } catch (e) { readBroken = true; }
@@ -210,6 +296,7 @@ function writeBlockWithAck(pkt, off) {
 				const resp = device.read([0x00], 65, 15);
 				if (isAck(resp, off)) { ackOk++; return true; }
 				if (!resp || resp.length === 0) { break; }
+				lastResp = resp.slice(0, 8).map(b => b.toString(16)).join(" ");
 			}
 		} catch (e) {
 			readBroken = true;

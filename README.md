@@ -28,7 +28,16 @@ the web driver at mchose.com.cn ("M HUB").
 
 - **Flash wear is unknown.** I could not confirm whether the lighting blocks are kept only in RAM or are written
   to the keyboard's flash. Don't leave the plugin running 24/7 until someone confirms this.
-- The plugin only changes lighting. It does not touch key mapping, macros or onboard profiles.
+- The plugin only changes lighting. It does not touch key mapping, macros or the profile settings.
+- **Onboard profiles:** every onboard profile has its own lighting area in the keyboard memory. The plugin
+  reads the active profile (command `04`) and writes to that profile's area, following profile switches.
+  Profile 1 (`0x0000`) and profile 3 (`0x0400`) were observed with the vendor web driver; the area of
+  profile 2 (`0x0200`) is inferred from the spacing. If the colors go to the wrong place, pick the profile
+  by hand in the plugin setting **Onboard Profile**.
+- **The profile's lighting mode must be "Custom"** in the web driver (Lighting → Custom). If a profile uses
+  "Normal light" (one of the keyboard's built-in effects), the keyboard shows that effect and ignores
+  SignalRGB. Forcing the mode from the plugin is not implemented yet (a command `06` seems to write it).
+- Don't keep the web driver open while SignalRGB controls the keyboard; both write to it.
 - The keyboard must acknowledge every block (`aa 0b …`). The plugin waits for these ACKs; without them parts
   of the keyboard stay on old colors.
 - Layout is in real key units (quarter‑key grid, 61×17). Other layouts (ISO, other Ace 68 revisions) were not tested.

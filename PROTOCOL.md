@@ -60,6 +60,29 @@ LShift 6 Z 44   X 49   C 29   V 9    B 69   N 43   M 23   , 21   . 1    / 32   R
 LCtrl 11 LWin 71  LAlt 31  Space 63  RAlt 61  Fn 14  RCtrl 74  Left 33  Down 73  Right 13
 ```
 
+## Onboard profiles
+
+The keyboard has 3 onboard profiles and each one has its own lighting area. The `0b` offsets are
+`area_base + {0x00, 0x38, 0x70, 0xA8, 0xE0, 0x118, 0x148}`:
+
+| profile | area base                              |
+|---------|----------------------------------------|
+| 1       | `0x0000` (observed)                    |
+| 2       | `0x0200` (inferred from the spacing)   |
+| 3       | `0x0400` (observed)                    |
+
+Writing to the base of a profile that is not the active one is accepted (ACK) but not shown.
+Checked on one unit: writing an all-green frame to `0x0400` while profile 3 was active turned the whole
+keyboard green.
+
+**Active profile:** the command `55 04 00 38 38 00 00 00 …` is answered with
+`aa 04 00 08 38 00 00 00 <profile> <count> …`. With profile 3 active the data was `02 03 …`
+(`<profile>` = 2, zero based; `<count>` = 3).
+
+**Lighting mode:** the web driver also sends command `06` blocks (offsets `0x80` and `0x88` in the capture)
+with what looks like the profile's lighting config: mode, brightness (`0x64` = 100) and colors. They were not
+decoded. A profile set to "Normal light" shows a built-in effect and ignores the custom buffer.
+
 ## Open questions
 
 - Do `0b` writes go to RAM or flash?
